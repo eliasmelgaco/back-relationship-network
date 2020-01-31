@@ -14,7 +14,11 @@ const _buscarPalavra = async(nome) => {
   
   return rp(options)
     .then(async function ($) {
-      const palavra = $('#mainContent > header > h1').text().trim().toLowerCase();
+      const palavraChave = $('#mainContent > header > h1').text().trim().toLowerCase();
+
+      if (!palavraChave) {
+        return null;
+      }
       const listaSignificados = $('#significado li');
       const listaSinonimos = $('#sinant li .contentListData a');
       const listaRelacionadas = $('#analogico li');
@@ -22,25 +26,28 @@ const _buscarPalavra = async(nome) => {
       const listaCitacoes = $('#citacoes li .contentListData');
 
       const listaSignificadosTratados = [];
-      const listaSinonimosTratados = [];
+      const listNode = [];
+      const listEdge = [];
       const listaRelacionadasTratados = [];
       const listaExpressoesTratados = [];
       const listaCitacoesTratados = [];
 
       for(i = 0; i < listaSignificados.length; i++) {
-        listaSignificadosTratados.push($(listaSignificados[i]).text());
+        $(listaSignificados[i]).children('span').remove()
+        listaSignificadosTratados.push($(listaSignificados[i]).text().trim());
       }
 
       for(i = 0; i < listaSinonimos.length; i++) {
         const palavraAtual = $(listaSinonimos[i]).text().trim();
-        if(palavra != palavraAtual) {
-          listaSinonimosTratados.push(palavraAtual);
+        if(palavraChave != palavraAtual) {
+          listNode.push({ data: { id: palavraAtual, weight: i + 2 }});
+          listEdge.push({ data: { id: `${palavraChave}${palavraAtual}`, source: palavraChave, target: palavraAtual }});
         }
       }
 
       for(i = 0; i < listaRelacionadas.length; i++) {
         const palavraAtual = $(listaRelacionadas[i]).text().trim();
-        if(palavra != palavraAtual) {
+        if(palavraChave != palavraAtual) {
           listaRelacionadasTratados.push(palavraAtual);
         }
       }
@@ -50,35 +57,38 @@ const _buscarPalavra = async(nome) => {
       }
 
       for(i = 0; i < listaCitacoes.length; i++) {
-        listaCitacoesTratados.push($(listaCitacoes[i]).text());
+        const texto = $(listaCitacoes[i].children[0]).text();
+        const autor = $(listaCitacoes[i].children[1]).text();
+
+        listaCitacoesTratados.push({ texto, autor });
       }
 
       return {
-        palavra,
-        listaSignificadosTratados,
-        listaSinonimosTratados,
-        listaRelacionadasTratados,
-        listaExpressoesTratados,
-        listaCitacoesTratados
+        palavra: palavraChave,
+        chart: [
+          { data: { id: palavraChave, weight: 1 }},
+          ...listNode,
+          ...listEdge
+        ],
+        significados: listaSignificadosTratados,
+        relacionados: listaRelacionadasTratados,
+        expressoes: listaExpressoesTratados,
+        citacoes: listaCitacoesTratados
       }
     });
 };
 
 app.use(cors());
 
-app.get('/words', async({ query }, expressResponse) => {
+app.get('/words', async({ query }, res) => {
   const palavra = await _buscarPalavra(query.nome);
 
-  expressResponse.json({
-    id: palavra.palavra,
-    nome: palavra.palavra,
-    dicionario_significados: palavra.listaSignificadosTratados,
-    dicionario_sinonimos: palavra.listaSinonimosTratados,
-    palavras_relacionadas: palavra.listaRelacionadasTratados,
-    dicionario_expressoes: palavra.listaExpressoesTratados,
-    dicionario_citacoes: palavra.listaCitacoesTratados
-  });
+  if (palavra) {
+    res.json(palavra);
+  } else {
+    return res.status(422).json({ status: 422, message: "Não encontrado. Certifique-se de que a palavra está em português." });
+  }
 });
 
 const port = process.env.PORT || 5000;
-app.listen(port, () => console.log(`Listening on port ${port}`)); 
+app.listen(port, () => console.log(`Listening on port ${port}`));
